@@ -34,7 +34,8 @@ import org.apache.flink.streaming.api.functions.IngestionTimeExtractor;
 import org.apache.flink.streaming.api.windowing.time.Time;
 import org.apache.flink.util.Collector;
 import org.apache.flink.streaming.api.functions.source.FileProcessingMode;
-import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer011;
+import org.apache.flink.streaming.connectors.kafka.FlinkKafkaConsumer010;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
 import org.stsffap.cep.monitoring.sources.ThreatEventWatermarkEmitter;
 import org.stsffap.cep.monitoring.sources.EventDeserializationSchema;
 import org.stsffap.cep.monitoring.events.Event;
@@ -105,30 +106,12 @@ public class CEPMonitoring {
 	Properties properties = new Properties();
 	properties.setProperty("bootstrap.servers", "localhost:9092");
 	properties.setProperty("group.id", "test");
-        Path pa = new Path("/home/flink/workspace/data/csv");
-        List<PojoField> fields = getPojoFields(ThreatEvent.class);
-	int n = fields.size();
-	for(int i = 0; i < n; i++)
-	{
-		System.out.println(fields.get(i));
-	}
-        PojoTypeInfo<ThreatEvent> threat_pojo = new PojoTypeInfo(ThreatEvent.class, fields);
-        //PojoTypeInfo<ThreatEvent> threat_pojo = PojoTypeInfo.of(ThreatEvent.class);
-        PojoCsvInputFormat format = new PojoCsvInputFormat(pa, threat_pojo, field_names);
-        format.setCharset("UTF-8");
         // Input stream of monitoring events
         DataStream<ThreatEvent> inputEventStream = env
-		.addSource(new FlinkKafkaConsumer011<ThreatEvent>("topic", new EventDeserializationSchema(), properties))
+		.addSource(new FlinkKafkaConsumer010<ThreatEvent>("test", new EventDeserializationSchema(), properties))
 		.assignTimestampsAndWatermarks(new ThreatEventWatermarkEmitter());
-                //.readFile(format, "/home/flink/workspace/data/csv", FileProcessingMode.PROCESS_CONTINUOUSLY, 5000, threat_pojo).assignTimestampsAndWatermarks(new ThreatEventWatermarkEmitter());
-                //.createInput(format,  threat_pojo).assignTimestampsAndWatermarks(new ThreatEventWatermarkEmitter());
 
 
-        //inputEventStream.print();
-                //.assignTimestampsAndWatermarks(new IngestionTimeExtractor<>());
-
-        // Warning pattern: Two consecutive temperature events whose temperature is higher than the given threshold
-        // appearing within a time interval of 10 seconds
         Pattern<ThreatEvent, ?> warningPattern = Pattern.<ThreatEvent>begin("first")
                 .subtype(ThreatEvent.class)
                 .where(new IterativeCondition<ThreatEvent>() {
@@ -170,35 +153,12 @@ public class CEPMonitoring {
             }
         );
 
-        // Alert pattern: Two consecutive temperature warnings appearing within a time interval of 20 seconds
-        /*Pattern<TemperatureWarning, ?> alertPattern = Pattern.<TemperatureWarning>begin("first")
-                .next("second")
-                .within(Time.seconds(20));
+        inputEventStream.print();
 
-        // Create a pattern stream from our alert pattern
-        PatternStream<TemperatureWarning> alertPatternStream = CEP.pattern(
-                warnings.keyBy("rackID"),
-                alertPattern);
-
-        // Generate a temperature alert only iff the second temperature warning's average temperature is higher than
-        // first warning's temperature
-        DataStream<TemperatureAlert> alerts = alertPatternStream.flatSelect(
-            (Map<String, List<TemperatureWarning>> pattern, Collector<TemperatureAlert> out) -> {
-                TemperatureWarning first = pattern.get("first").get(0);
-                TemperatureWarning second = pattern.get("second").get(0);
-
-                if (first.getAverageTemperature() < second.getAverageTemperature()) {
-                    out.collect(new TemperatureAlert(first.getRackID()));
-                }
-            });*/
-
-        // Print the warning and alert events to stdout
-        //inputEventStream.print();
         warnings.print();
-        //alerts.print();
         
 
 
-        env.execute("CEP monitoring job");
+        env.execute("CEP kafka job");
     }
 }
