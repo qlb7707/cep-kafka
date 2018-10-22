@@ -22,6 +22,7 @@ import org.apache.flink.cep.CEP;
 import org.apache.flink.cep.PatternStream;
 import org.apache.flink.cep.pattern.Pattern;
 import org.apache.flink.api.java.io.PojoCsvInputFormat;
+import org.apache.flink.formats.avro.AvroOutputFormat;
 import org.apache.flink.api.java.typeutils.PojoTypeInfo;
 import org.apache.flink.api.java.typeutils.PojoField;
 import org.apache.flink.api.common.typeinfo.TypeInformation;
@@ -42,8 +43,6 @@ import org.stsffap.cep.monitoring.events.Event;
 import org.stsffap.cep.monitoring.events.ThreatEvent;
 import org.stsffap.cep.monitoring.events.ThreatEventWarning;
 
-//import org.stsffap.cep.monitoring.events.TemperatureAlert;
-//import org.stsffap.cep.monitoring.events.TemperatureWarning;
 
 import java.util.List;
 import java.util.ArrayList;
@@ -62,56 +61,29 @@ import java.util.Properties;
  * whose temperatures are rising, we want to generate an alert. This is achieved by defining another CEP pattern which
  * analyzes the stream of generated temperature warnings.
  */
+
+
 public class CEPMonitoring {
 
-    private static String[] field_names = {"id", "flag_mask", "agg_id", "defender_id", "real_defender"
-                                    , "pri_type", "sec_type", "begin_time", "end_time", "severity"
-                                    , "confidence", "app_id", "app_name", "protocol", "policy_id"
-                                    , "profile_id", "action_id", "stage_id", "count", "event_name"
-                                    , "event_status", "event_interv", "interv_comments", "src_vsysid"
-                                    , "src_vsysname", "src_vrid", "src_vrname", "src_interfaceid", "src_interfacename"
-                                    , "src_zoneid", "src_zonename", "src_ip", "src_ip_mask_len", "src_port"
-                                    , "src_hostindex", "src_hostname", "src_country", "src_region", "src_city"
-                                    , "dst_vsysid", "dst_vsysname", "dst_vrid", "dst_vrname", "dst_interfaceid"
-                                    , "dst_interfacename", "dst_zoneid", "dst_zonename", "dst_ip", "dst_ip_mask_len"
-                                    , "dst_port", "dst_hostindex", "dst_hostname", "dst_country", "dst_region"
-                                    , "dst_city", "priv_data", "is_ioc", "need_show", "threat_cat", "category_type"
-                                    , "hscc", "correlate_id", "src_serversubnet", "dst_serversubnet"};
-
-    public static List<PojoField> getPojoFields(Class cls) {
-        List<PojoField> pojoFields = new ArrayList<PojoField>();
-        //Field[] fields = cls.getDeclaredFields();
-        int length = field_names.length;
-        for(int i = 0 ; i < length; i++) {
-            try {
-                Field f = cls.getDeclaredField(field_names[i]);
-//                System.out.printf("%s,%s\n", field_names[i], f.getType());
-                pojoFields.add(new PojoField(f, TypeInformation.of(f.getType())));
-            }
-            catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-        return pojoFields;
-
-    }
 
 
     public static void main(String[] args) throws Exception {
-
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
 
-        // Use ingestion time => TimeCharacteristic == EventTime + IngestionTimeExtractor
         env.setStreamTimeCharacteristic(TimeCharacteristic.EventTime);
+
+	//kafka configuration
 	Properties properties = new Properties();
 	properties.setProperty("bootstrap.servers", "localhost:9092");
 	properties.setProperty("group.id", "test");
-        // Input stream of monitoring events
+
+	//get env and data source
         DataStream<ThreatEvent> inputEventStream = env
 		.addSource(new FlinkKafkaConsumer010<ThreatEvent>("test", new EventDeserializationSchema(), properties))
 		.assignTimestampsAndWatermarks(new ThreatEventWatermarkEmitter());
 
-
+	//define cep pattern(rule)
+	//rule 1
         Pattern<ThreatEvent, ?> warningPattern = Pattern.<ThreatEvent>begin("first")
                 .subtype(ThreatEvent.class)
                 .where(new IterativeCondition<ThreatEvent>() {
@@ -120,7 +92,6 @@ public class CEPMonitoring {
                     @Override
                     public boolean filter(ThreatEvent value, Context<ThreatEvent> ctx) throws Exception {
                          return value.getEvent_name().equals(new String("\"HTTP X-Sinkhole Response\""));
-                         //return value.getConfidence() >=50;
                     }
                 })
                 .followedBy("second")
@@ -130,10 +101,33 @@ public class CEPMonitoring {
 
                     @Override
                     public boolean filter(ThreatEvent value, Context<ThreatEvent> ctx) throws Exception {
-                        //return value.getConfidence() >= 50;
 			Iterator<ThreatEvent> it = ctx.getEventsForPattern("first").iterator();
 			long dst = it.next().getDst_ip();
                         return value.getEvent_name().equals(new String("\"HTTP Header Contain No Browser Information\"")) && value.getSrc_ip() == dst;
+                    }
+                })
+                .within(Time.seconds(300));
+	//rule2
+        Pattern<ThreatEvent, ?> warningPattern2 = Pattern.<ThreatEvent>begin("first")
+                .subtype(ThreatEvent.class)
+                .where(new IterativeCondition<ThreatEvent>() {
+                    private static final long serialVersionUID = -6301755149429716724L;
+
+                    @Override
+                    public boolean filter(ThreatEvent value, Context<ThreatEvent> ctx) throws Exception {
+                         return value.getEvent_name().equals(new String("\"lbqin1\""));
+                    }
+                })
+                .followedBy("second")
+                .subtype(ThreatEvent.class)
+                .where(new IterativeCondition<ThreatEvent>() {
+                    private static final long serialVersionUID = 2392863109523984059L;
+
+                    @Override
+                    public boolean filter(ThreatEvent value, Context<ThreatEvent> ctx) throws Exception {
+			Iterator<ThreatEvent> it = ctx.getEventsForPattern("first").iterator();
+			long dst = it.next().getDst_ip();
+                        return value.getEvent_name().equals(new String("\"lbqin2\"")) && value.getSrc_ip() == dst;
                     }
                 })
                 .within(Time.seconds(300));
@@ -142,9 +136,20 @@ public class CEPMonitoring {
         PatternStream<ThreatEvent> rule1Stream = CEP.pattern(
                 inputEventStream,
                 warningPattern);
+        PatternStream<ThreatEvent> rule2Stream = CEP.pattern(
+                inputEventStream,
+                warningPattern2);
 
-        // Generate temperature warnings for each matched warning pattern
+        // Generate warnings for each matched warning pattern
         DataStream<ThreatEventWarning> warnings = rule1Stream.select(
+            (Map<String, List<ThreatEvent>> pattern) -> {
+                ThreatEvent first = pattern.get("first").get(0);
+                ThreatEvent second = pattern.get("second").get(0);
+
+                return new ThreatEventWarning(first.getId(),second.getId(), first.getEvent_name(),second.getEvent_name());
+            }
+        );
+        DataStream<ThreatEventWarning> warnings2 = rule2Stream.select(
             (Map<String, List<ThreatEvent>> pattern) -> {
                 ThreatEvent first = pattern.get("first").get(0);
                 ThreatEvent second = pattern.get("second").get(0);
@@ -154,11 +159,10 @@ public class CEPMonitoring {
         );
 
         inputEventStream.print();
-
+	//inputEventStream.writeUsingOutputFormat(new AvroOutputFormat<ThreatEvent>(new Path("/home/hillstone/test/avro"),ThreatEvent.class));
         warnings.print();
-        
-
-
+	warnings2.print();
+        //submit job to flink 
         env.execute("CEP kafka job");
     }
 }

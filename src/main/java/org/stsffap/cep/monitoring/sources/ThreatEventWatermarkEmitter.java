@@ -26,7 +26,7 @@ public class ThreatEventWatermarkEmitter implements AssignerWithPunctuatedWaterm
 	@Override
 	public Watermark checkAndGetNextWatermark(ThreatEvent arg0, long arg1) {
 		if (null != arg0) {
-			return new Watermark(1000 * arg0.getEnd_time() - 60000);
+			return new Watermark(1000 * arg0.getEnd_time() /*- 60000*/);
 		}
 		return null;
 	}

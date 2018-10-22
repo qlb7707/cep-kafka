@@ -117,6 +117,26 @@ public class ThreatEvent {
         this.category_type = category_type;
         this.hscc = hscc;
         this.correlate_id = correlate_id;
+	this.app_name="";
+	this.interv_comments="";
+	this.src_vsysname="";
+	this.src_vrname="";
+	this.src_interfacename="";
+	this.src_zonename="";
+	this.src_hostname="";
+	this.src_country="";
+	this.src_region="";
+	this.src_city="";
+	this.dst_vsysname="";
+	this.dst_vrname="";
+	this.dst_interfacename="";
+	this.dst_zonename="";
+	this.dst_hostname="";
+	this.dst_country="";
+	this.dst_region="";
+	this.dst_city="";
+	this.src_serversubnet="";
+	this.dst_serversubnet="";
     }
 
     public ThreatEvent() {
@@ -138,6 +158,26 @@ public class ThreatEvent {
         this.category_type = -1;
         this.hscc = 0;
         this.correlate_id = 0;
+	this.app_name="";
+	this.interv_comments="";
+	this.src_vsysname="";
+	this.src_vrname="";
+	this.src_interfacename="";
+	this.src_zonename="";
+	this.src_hostname="";
+	this.src_country="";
+	this.src_region="";
+	this.src_city="";
+	this.dst_vsysname="";
+	this.dst_vrname="";
+	this.dst_interfacename="";
+	this.dst_zonename="";
+	this.dst_hostname="";
+	this.dst_country="";
+	this.dst_region="";
+	this.dst_city="";
+	this.src_serversubnet="";
+	this.dst_serversubnet="";
     }
     
     public int getId() {
